@@ -1,0 +1,47 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging / PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# Keep specified specs explicitly in the repository:
+!AltyaziPRO.spec
+!Setup_AltyaziPRO.spec
+
+# Executables and Installer outputs
+installer/*.exe
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*,cover
+.hypothesis/
+
+# Logs
+*.log
+boot_log.txt
+debug_out.txt
+
+# Local app configurations
+config.json
+
+# IDE / Editor configurations
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
