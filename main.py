@@ -41,11 +41,18 @@ class SettingsWindow(QMainWindow):
         ocr_group = QGroupBox("OCR")
         ocr_layout = QVBoxLayout()
         
+        # Sort languages but keep English and Turkish at the top for convenience
+        from translator import LANGUAGES
+        lang_list = list(LANGUAGES.keys())
+        if "İngilizce" in lang_list: lang_list.remove("İngilizce")
+        if "Türkçe" in lang_list: lang_list.remove("Türkçe")
+        sorted_langs = ["İngilizce", "Türkçe"] + sorted(lang_list)
+
         row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Dil:"))
+        row1.addWidget(QLabel("Kaynak Dil (OCR):"))
         self.lang_cb = QComboBox()
-        self.lang_cb.addItems(["English", "Turkish"])
-        self.lang_cb.setCurrentText(current_settings.get("lang", "English"))
+        self.lang_cb.addItems(sorted_langs)
+        self.lang_cb.setCurrentText(current_settings.get("source_lang", "İngilizce"))
         row1.addWidget(self.lang_cb)
         ocr_layout.addLayout(row1)
         
@@ -62,13 +69,37 @@ class SettingsWindow(QMainWindow):
         tr_group = QGroupBox("Çeviri ayarı")
         tr_layout = QVBoxLayout()
         row_tr = QHBoxLayout()
-        row_tr.addWidget(QLabel("Tür:"))
+        row_tr.addWidget(QLabel("Servis:"))
         self.tr_type_cb = QComboBox()
-        self.tr_type_cb.addItem("Temel (Google)")
+        self.tr_type_cb.addItems(["Google", "MyMemory", "Gemini"])
+        self.tr_type_cb.setCurrentText(current_settings.get("translation_service", "Google"))
         row_tr.addWidget(self.tr_type_cb)
         tr_layout.addLayout(row_tr)
+
+        # Target Language Row
+        row_target = QHBoxLayout()
+        row_target.addWidget(QLabel("Hedef Dil:"))
+        self.target_lang_cb = QComboBox()
+        self.target_lang_cb.addItems(sorted_langs)
+        self.target_lang_cb.setCurrentText(current_settings.get("target_lang", "Türkçe"))
+        row_target.addWidget(self.target_lang_cb)
+        tr_layout.addLayout(row_target)
+
+        # API Key Row
+        self.api_row = QHBoxLayout()
+        self.api_label = QLabel("API Anahtarı:")
+        self.api_input = QLineEdit()
+        self.api_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_input.setText(current_settings.get("api_key", ""))
+        self.api_row.addWidget(self.api_label)
+        self.api_row.addWidget(self.api_input)
+        tr_layout.addLayout(self.api_row)
+
         tr_group.setLayout(tr_layout)
         layout.addWidget(tr_group)
+
+        self.tr_type_cb.currentTextChanged.connect(self.toggle_api_visibility)
+        self.toggle_api_visibility(self.tr_type_cb.currentText())
 
         # Image Settings Group
         img_group = QGroupBox("Görüntü Ayarı")
@@ -129,9 +160,20 @@ class SettingsWindow(QMainWindow):
         btn_layout.addWidget(self.apply_btn)
         layout.addLayout(btn_layout)
 
+    def toggle_api_visibility(self, service):
+        if service == "Gemini":
+            self.api_label.show()
+            self.api_input.show()
+        else:
+            self.api_label.hide()
+            self.api_input.hide()
+
     def on_apply(self):
         settings = {
-            "lang": self.lang_cb.currentText(),
+            "source_lang": self.lang_cb.currentText(),
+            "target_lang": self.target_lang_cb.currentText(),
+            "translation_service": self.tr_type_cb.currentText(),
+            "api_key": self.api_input.text(),
             "use_rgb": self.rgb_check.isChecked(), "r": self.r_val.value(), "g": self.g_val.value(), "b": self.b_val.value(),
             "use_hsv": self.hsv_check.isChecked(), "s_min": self.s_min.value(), "v_min": self.v_min.value(),
             "use_threshold": self.thresh_check.isChecked(), "threshold": self.thresh_val.value(),
@@ -177,6 +219,7 @@ class SubtitleTranslatorApp(QObject):
         
         self.ocr, self.translator = OCREngine(), Translator()
         self.ocr.update_settings(self.settings)
+        self.translator.update_settings(self.settings)
         
         self.overlay, self.selector = TranslationOverlay(), RegionSelector()
         self.settings_win = SettingsWindow(self.settings)
@@ -223,7 +266,13 @@ class SubtitleTranslatorApp(QObject):
                 with open(self.config_path, 'r') as f:
                     return json.load(f)
         except: pass
-        return {"lang": "English", "use_threshold": True, "threshold": 127}
+        return {
+            "source_lang": "İngilizce",
+            "target_lang": "Türkçe",
+            "translation_service": "Google",
+            "use_threshold": True,
+            "threshold": 127
+        }
 
     def save_settings(self):
         try:
@@ -235,10 +284,15 @@ class SubtitleTranslatorApp(QObject):
         self.settings = settings
         self.save_settings()
         self.ocr.update_settings(self.settings)
+        self.translator.update_settings(self.settings)
         # Restart selector to pick new area with new settings
         self.request_new()
 
     def request_new(self):
+        self.last_text = ""
+        self.last_img = None
+        self.is_processing = False
+        self.overlay.update_text("")
         self.timer.stop(); self.overlay.hide(); self.selector.show_selector()
 
     def start_app(self, ocr_rect, out_rect):

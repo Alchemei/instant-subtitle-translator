@@ -32,9 +32,31 @@ class OCREngine:
         }
 
     def update_settings(self, new_settings):
+        old_lang = self.settings.get("source_lang", "İngilizce")
         self.settings.update(new_settings)
-        # Windows OCR automatically handles multiple languages from user profile
-        # but we could re-initialize if needed for specific tags.
+        new_lang = self.settings.get("source_lang", "İngilizce")
+        
+        if old_lang != new_lang or not self.engine:
+            from translator import LANGUAGES
+            lang_code = LANGUAGES.get(new_lang, "en")
+            
+            ocr_tags = {
+                "en": "en-US", "tr": "tr-TR", "de": "de-DE", "fr": "fr-FR",
+                "es": "es-ES", "it": "it-IT", "ru": "ru-RU", "ja": "ja-JP",
+                "ko": "ko-KR", "zh": "zh-CN", "ar": "ar-SA", "pt": "pt-PT",
+                "pl": "pl-PL", "nl": "nl-NL", "uk": "uk-UA", "el": "el-GR"
+            }
+            tag = ocr_tags.get(lang_code, "en-US")
+            
+            try:
+                lang = ocr.Language(tag)
+                engine = ocr.OcrEngine.try_create_from_language(lang)
+                if engine:
+                    self.engine = engine
+                    print(f"OCR Engine successfully initialized for: {tag}")
+            except Exception as e:
+                print(f"Failed to initialize OCR Engine for {tag}: {e}")
+
 
     def preprocess_image(self, image_np, scale=2.0):
         img = image_np.copy()
